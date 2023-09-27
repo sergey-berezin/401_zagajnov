@@ -10,6 +10,7 @@ using System.Collections.Generic;
 using SixLabors.Fonts;
 using ClassLibrary;
 using System.Threading.Tasks;
+using System.Xml.Linq;
 
 namespace YOLO_csharp
 {
@@ -19,14 +20,13 @@ namespace YOLO_csharp
         {
             
 
-            IProgress<int> p = new Progress<int>(progress =>
-            {
-                Console.WriteLine("Running Step: {0}", progress);
-            });
+           
 
-            ImageAnalyzer obj = await ImageAnalyzer.Create(p);
-            obj.ImagePreprocessing(args.FirstOrDefault() ?? "chair.jpg");
-            await obj.Detect();
+            ImageAnalyzer obj = await ImageAnalyzer.Create();
+            //obj.ImagePreprocessing(args.FirstOrDefault() ?? "chair.jpg");
+            await obj.Detect(args.FirstOrDefault());
+            obj.make_CSV_file();
+
         }
     }
 

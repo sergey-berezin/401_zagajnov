@@ -21,31 +21,15 @@ namespace ClassLibrary
 {
     public class ImageAnalyzer
     {
-        Image<Rgb24> image { get; set; }
-        Image<Rgb24> resized { get; set; }
-        List<NamedOnnxValue> inputs { get; set; }
+        public Image<Rgb24> Image { get; private set; }
+        public Image<Rgb24> Resized { get; private set; }
+        public List<NamedOnnxValue> Inputs { get; private set; }
         private ImageAnalyzer()
         {
 
         }
-        //private static Task NetworkDownloader(IProgress<int> p, CancellationToken token)
-        //{
 
-        //    return Task.Factory.StartNew(() =>
-        //    {
-        //        if (!System.IO.File.Exists("tinyyolov2-8.onnx"))
-        //            using (var client = new WebClient())
-        //            {
-        //                //Environment.GetFolderPath(Environment.SpecialFolder.System) + 
-        //                //token.ThrowIfCancellationRequested();
-        //                client.DownloadFile("https://storage.yandexcloud.net/dotnet4/tinyyolov2-8.onnx", "tinyyolov2-8.onnx");
-
-        //            }
-        //        token.ThrowIfCancellationRequested();
-        //    }, token, TaskCreationOptions.LongRunning, TaskScheduler.Current);
-
-        //}
-        private static async Task NetworkDownloader(IProgress<int> p, CancellationToken token)
+        private static async Task NetworkDownloader(CancellationToken token)
         {
             if (!System.IO.File.Exists("tinyyolov2-8.onnx"))
             {
@@ -69,19 +53,19 @@ namespace ClassLibrary
             }
         }
 
-        public static async Task<ImageAnalyzer> Create(IProgress<int> p)
+        public static async Task<ImageAnalyzer> Create()
         {
             try
             {
                 CancellationTokenSource ctf = new CancellationTokenSource();
-                var task = NetworkDownloader(p, ctf.Token);
+                var task = NetworkDownloader(ctf.Token);
                 //ctf.Cancel();
                 await task;
             }
             catch(Exception ex)
             {
                 Console.WriteLine(ex.Message);
-                Environment.Exit(1);
+                
             }
             
             return new ImageAnalyzer();
@@ -110,16 +94,16 @@ namespace ClassLibrary
 
         public void ImagePreprocessing(string image_path)
         {
-            image = SixLabors.ImageSharp.Image.Load<Rgb24>(image_path);
+            Image = SixLabors.ImageSharp.Image.Load<Rgb24>(image_path);
 
-            int imageWidth = image.Width;
-            int imageHeight = image.Height;
+            int imageWidth = Image.Width;
+            int imageHeight = Image.Height;
 
             // Размер изображения
             const int TargetSize = 416;
 
             // Изменяем размер изображения до 416 x 416
-            resized = image.Clone(x =>
+            Resized = Image.Clone(x =>
             {
                 x.Resize(new ResizeOptions
                 {
@@ -132,7 +116,7 @@ namespace ClassLibrary
             var input = new DenseTensor<float>(new[] { 1, 3, TargetSize, TargetSize });
 
 
-            resized.ProcessPixelRows(pa =>
+            Resized.ProcessPixelRows(pa =>
             {
                 for (int y = 0; y < TargetSize; y++)
                 {
@@ -147,21 +131,21 @@ namespace ClassLibrary
             });
 
             // Подготавливаем входные данные нейросети. Имя input задано в файле модели
-            inputs = new List<NamedOnnxValue>
+            Inputs = new List<NamedOnnxValue>
             {
                NamedOnnxValue.CreateFromTensor("image", input),
             };
         }
         private List<ObjectBox> GetObjects()
         {
-            int imageWidth = image.Width;
-            int imageHeight = image.Height;
+            int imageWidth = Image.Width;
+            int imageHeight = Image.Height;
             const int TargetSize = 416;
             // Вычисляем предсказание нейросетью
             using var session = new InferenceSession("tinyyolov2-8.onnx");
             //foreach(var n in session.InputNames)
             //    Console.WriteLine(n);
-            using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> results = session.Run(inputs);
+            using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> results = session.Run(Inputs);
 
             // Получаем результаты
             var outputs = results.First().AsTensor<float>();
@@ -196,7 +180,7 @@ namespace ClassLibrary
 
             int cellSize = TargetSize / CellCount;
 
-            var boundingBoxes = resized.Clone();
+            var boundingBoxes = Resized.Clone();
 
             List<ObjectBox> objects = new();
 
@@ -243,7 +227,6 @@ namespace ClassLibrary
                             });
                         }
                     }
-            boundingBoxes.Save("boundingboxes.jpg");
 
             void Annotate(Image<Rgb24> target, IEnumerable<ObjectBox> objects)
             {
@@ -269,9 +252,7 @@ namespace ClassLibrary
                 }
             }
 
-            var annotated = resized.Clone();
-            Annotate(annotated, objects);
-            annotated.SaveAsJpeg("annotated.jpg");
+            var annotated = Resized.Clone();
 
             // Убираем дубликаты
             for (int i = 0; i < objects.Count; i++)
@@ -295,11 +276,9 @@ namespace ClassLibrary
                     }
                 }
             }
-
             
-            var final = resized.Clone();
-            Annotate(final, objects);
-            final.SaveAsJpeg("final.jpg");
+            var final = Resized.Clone();
+
             return objects;
         }
         public record ObjectBox(double XMin, double YMin, double XMax, double YMax, double Confidence, int Class)
@@ -308,66 +287,79 @@ namespace ClassLibrary
                 (Math.Min(XMax, b2.XMax) - Math.Max(XMin, b2.XMin)) * (Math.Min(YMax, b2.YMax) - Math.Max(YMin, b2.YMin)) /
                 ((Math.Max(XMax, b2.XMax) - Math.Min(XMin, b2.XMin)) * (Math.Max(YMax, b2.YMax) - Math.Min(YMin, b2.YMin)));
         }
-        public async Task Detect()
+        public List<ObjectBox> Objects { get; private set; }
+        public List<string> Filenames { get; private set; }
+        public async Task Detect(string image_path)
         {
-            var objects = GetObjects();
-            List<string> filenames = new List<string>();
+            ImagePreprocessing(image_path);
+            Objects = GetObjects();
+            Filenames = new List<string>();
             List<Image<Rgb24>> cut_images = new List<Image<Rgb24>>();
-            await foreach (var obj in make_files_with_object(objects))
+            await foreach (var obj in make_files_with_object(Objects))
             {
-                cut_images.Add(obj.Key);
-                filenames.Add(obj.Value);
-                obj.Key.SaveAsJpeg(obj.Value);
+                cut_images.Add(obj.Item1);
+                Filenames.Add(obj.Item2);
+                obj.Item1.SaveAsJpeg(obj.Item2);
             }
-            make_CSV_file(objects, filenames);
         }
-        
 
-        async IAsyncEnumerable<KeyValuePair<Image<Rgb24>, string>> make_files_with_object(List<ObjectBox> objects)
+
+        async IAsyncEnumerable<Tuple<Image<Rgb24>, string>> make_files_with_object(List<ObjectBox> objects)
         {
             List<string> filenames = Enumerable
             .Range(0, objects.Count)
             .Select(i => $"file{i}.jpg")
             .ToList();
 
-            for (int i = 0; i < objects.Count; i++)
+            var jobs = Enumerable.Range(0, objects.Count).Select(i => DoWork(objects[i], filenames[i])).ToList();
+
+            while (jobs.Count > 0)
             {
-                ObjectBox obj = objects[i];
-                var obj_image = resized.Clone(x =>
+                var t = await Task.WhenAny(jobs);
+                yield return await t;
+                jobs.Remove(t);
+            }
+        }
+
+        async Task<Tuple<Image<Rgb24>, string>> DoWork(ObjectBox obj, string filename)
+        {
+            return await Task<Tuple<Image<Rgb24>, string>>.Factory.StartNew(() =>
+            {
+                return new(Resized.Clone(x =>
                 {
                     x.Crop(new Rectangle((int)obj.XMin, (int)obj.YMin, (int)(obj.XMax - obj.XMin), (int)(obj.YMax - obj.YMin)));
-                });
-                yield return new KeyValuePair<Image<Rgb24>, string> (obj_image, filenames[i]);
-                //obj_image.SaveAsJpeg(filenames[i]);
-            }
+                }), filename);
+            });
+            
         }
+
         public class ObjectEntity
         {
-            public string fileName { get; set; }
-            public string className { get; set; }
-            public int x { get; set; }
-            public int y { get; set; }
-            public int w { get; set; }
-            public int h { get; set; }
+            public string FileName { get; private set; }
+            public string ClassName { get; private set; }
+            public int X { get; private set; }
+            public int Y { get; private set; }
+            public int W { get; private set; }
+            public int H { get; private set; }
             public ObjectEntity(string fileName, string className, int x, int y, int w, int h)
             {
-                this.fileName = fileName;
-                this.className = className;
-                this.x = x;
-                this.y = y;
-                this.w = w;
-                this.h = h;
+                this.FileName = fileName;
+                this.ClassName = className;
+                this.X = x;
+                this.Y = y;
+                this.W = w;
+                this.H = h;
             }
         }
-        private void make_CSV_file(List<ObjectBox> objects, List<string> filenames)
+        public void make_CSV_file()
         {
             string pathCsvFile = "fileCSV.csv";
 
             List<ObjectEntity> objectsCSV = new List<ObjectEntity>();
-            for(int i = 0; i < objects.Count; i++)
+            for(int i = 0; i < Objects.Count; i++)
             {
-                var obj = objects[i];
-                var filename = filenames[i];
+                var obj = Objects[i];
+                var filename = Filenames[i];
                 objectsCSV.Add(new ObjectEntity(filename, labels[obj.Class], (int)obj.XMin, (int)obj.YMin, (int)(obj.XMax - obj.XMin), (int)(obj.YMax - obj.YMin)));
             }
 
@@ -375,7 +367,6 @@ namespace ClassLibrary
             {
                 using (CsvWriter csvReader = new CsvWriter(streamReader, CultureInfo.InvariantCulture))
                 {
-                    //csvReader.Configuration.Delimiter = ",";
                     csvReader.WriteRecords(objectsCSV);
                 }
             }
