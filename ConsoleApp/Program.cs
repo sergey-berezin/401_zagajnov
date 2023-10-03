@@ -92,8 +92,8 @@ namespace YOLO_csharp
             {
                 var image = SixLabors.ImageSharp.Image.Load<Rgb24>(args.FirstOrDefault());
                 ImageAnalyzer obj = await ImageAnalyzer.Create(ctf.Token);
-                var objects = await obj.Detect(image, ctf.Token);
-                var cut_pairs = await obj.CutImage(image, objects, ctf.Token);
+                var result = await obj.Detect(image, ctf.Token);
+                var cut_pairs = await obj.CutImage(result, ctf.Token);
                 make_CSV_file(cut_pairs);
             }
             catch (Exception ex)

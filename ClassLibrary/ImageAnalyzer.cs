@@ -17,6 +17,8 @@ using SixLabors.ImageSharp.ColorSpaces;
 using System.Net.Http;
 using Polly;
 using static System.Collections.Specialized.BitVector32;
+using static System.Net.Mime.MediaTypeNames;
+using System.Xml.Linq;
 
 namespace ClassLibrary
 {
@@ -48,7 +50,7 @@ namespace ClassLibrary
                         Console.WriteLine("Getting data...");
                         return await httpClient.GetByteArrayAsync("https://storage.yandexcloud.net/dotnet4/tinyyolov2-8.onnx", token);
                     });
-                    await File.WriteAllBytesAsync("NeuralNetworkName", buffer, token);
+                    await File.WriteAllBytesAsync(NeuralNetworkName, buffer, token);
                 }
             }
         }
@@ -274,20 +276,23 @@ namespace ClassLibrary
                 (Math.Min(XMax, b2.XMax) - Math.Max(XMin, b2.XMin)) * (Math.Min(YMax, b2.YMax) - Math.Max(YMin, b2.YMin)) /
                 ((Math.Max(XMax, b2.XMax) - Math.Min(XMin, b2.XMin)) * (Math.Max(YMax, b2.YMax) - Math.Min(YMin, b2.YMin)));
         }
-        public async Task<List<ObjectBox>> Detect(Image<Rgb24> image, CancellationToken token)
+        public async Task<Tuple<Image<Rgb24>, List<ObjectBox>>> Detect(Image<Rgb24> image, CancellationToken token)
         {
-            return await Task<List<ObjectBox>>.Factory.StartNew(() =>
+            List<ObjectBox> objects = await Task<List<ObjectBox>>.Factory.StartNew(() =>
             {
                 var tuple = ImagePreprocessing(image);
                 var resized = tuple.Item1;
                 var inputs = tuple.Item2;
                 return GetObjects(resized, inputs);
             }, token, TaskCreationOptions.LongRunning, TaskScheduler.Current);
+            return new Tuple<Image<Rgb24>, List<ObjectBox>>(image, objects);
         }
 
 
-        public async Task<List<Tuple<Image<Rgb24>, ObjectBox>>> CutImage(Image<Rgb24> image, List<ObjectBox> objects, CancellationToken token)
+        public async Task<List<Tuple<Image<Rgb24>, ObjectBox>>> CutImage(Tuple<Image<Rgb24>, List<ObjectBox>> input, CancellationToken token)
         {
+            Image<Rgb24> image = input.Item1;
+            List<ObjectBox> objects = input.Item2;
 
             const int TargetSize = 416;
             var resized = image.Clone(x =>
