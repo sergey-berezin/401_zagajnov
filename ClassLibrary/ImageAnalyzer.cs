@@ -23,15 +23,15 @@ namespace ClassLibrary
     public class ImageAnalyzer
     {
         private InferenceSession Session;
-
+        private const string NeuralNetworkName = "tinyyolov2-8.onnx";
         private ImageAnalyzer()
         {
-            Session = new InferenceSession("tinyyolov2-8.onnx");
+            Session = new InferenceSession(NeuralNetworkName);
         }
 
         private static async Task NetworkDownloader(CancellationToken token)
         {
-            if (!System.IO.File.Exists("tinyyolov2-8.onnx"))
+            if (!System.IO.File.Exists(NeuralNetworkName))
             {
                 var jitterer = new Random();
 
@@ -48,7 +48,7 @@ namespace ClassLibrary
                         Console.WriteLine("Getting data...");
                         return await httpClient.GetByteArrayAsync("https://storage.yandexcloud.net/dotnet4/tinyyolov2-8.onnx", token);
                     });
-                    await File.WriteAllBytesAsync("tinyyolov2-8.onnx", buffer, token);
+                    await File.WriteAllBytesAsync("NeuralNetworkName", buffer, token);
                 }
             }
         }
@@ -282,7 +282,7 @@ namespace ClassLibrary
                 var resized = tuple.Item1;
                 var inputs = tuple.Item2;
                 return GetObjects(resized, inputs);
-            }, token);
+            }, token, TaskCreationOptions.LongRunning, TaskScheduler.Current);
         }
 
 
