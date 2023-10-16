@@ -11,10 +11,7 @@
 		<PackageReference Include="Polly" Version="7.2.4" />
 		<PackageReference Include="SixLabors.Imagesharp" Version="3.0.2" />
 		<PackageReference Include="SixLabors.ImageSharp.Drawing" Version="2.0.0" />
-	</ItemGroup>
-
-	<ItemGroup>
-	  <ProjectReference Include="..\ClassLibrary\ClassLibrary.csproj" />
+		<PackageReference Include="Zagainov.ImageAnalyzer" Version="0.1.1023.3" />
 	</ItemGroup>
 
 </Project>

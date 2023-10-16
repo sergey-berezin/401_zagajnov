@@ -64,13 +64,6 @@ namespace ClassLibrary
             return new ImageAnalyzer();
         }
 
-        string[] labels = new string[]
-            {
-                "aeroplane", "bicycle", "bird", "boat", "bottle",
-                "bus", "car", "cat", "chair", "cow",
-                "diningtable", "dog", "horse", "motorbike", "person",
-                "pottedplant", "sheep", "sofa", "train", "tvmonitor"
-            };
 
         float Sigmoid(float value)
         {
@@ -85,10 +78,9 @@ namespace ClassLibrary
             return exps.Select(e => (float)(e / sum)).ToArray();
         }
 
-        public Tuple<Image<Rgb24>, List<NamedOnnxValue>> ImagePreprocessing(Image<Rgb24> image)
+        public Tuple<Image<Rgb24>, List<NamedOnnxValue>> ImagePreprocessing(Image<Rgb24> image, CancellationToken token)
         {
-
-
+            token.ThrowIfCancellationRequested();
             int imageWidth = image.Width;
             int imageHeight = image.Height;
 
@@ -104,7 +96,7 @@ namespace ClassLibrary
                     Mode = ResizeMode.Pad // Дополнить изображение до указанного размера с сохранением пропорций
                 });
             });
-
+            token.ThrowIfCancellationRequested();
             // Перевод пикселов в тензор и нормализация
             var input = new DenseTensor<float>(new[] { 1, 3, TargetSize, TargetSize });
 
@@ -113,6 +105,7 @@ namespace ClassLibrary
             {
                 for (int y = 0; y < TargetSize; y++)
                 {
+                    token.ThrowIfCancellationRequested();
                     Span<Rgb24> pixelSpan = pa.GetRowSpan(y);
                     for (int x = 0; x < TargetSize; x++)
                     {
@@ -130,7 +123,7 @@ namespace ClassLibrary
             };
             return new(resized, inputs);
         }
-        private List<ObjectBox> GetObjects(Image<Rgb24> resized, List<NamedOnnxValue> inputs)
+        private List<ObjectBox> GetObjects(Image<Rgb24> resized, List<NamedOnnxValue> inputs, CancellationToken token)
         {
 
             lock (Session)
@@ -180,6 +173,7 @@ namespace ClassLibrary
                     for (var col = 0; col < CellCount; col++)
                         for (var box = 0; box < BoxCount; box++)
                         {
+                            token.ThrowIfCancellationRequested();
                             var rawX = outputs[0, (5 + ClassCount) * box, row, col];
                             var rawY = outputs[0, (5 + ClassCount) * box + 1, row, col];
 
@@ -220,36 +214,13 @@ namespace ClassLibrary
                             }
                         }
 
-                void Annotate(Image<Rgb24> target, IEnumerable<ObjectBox> objects)
-                {
-                    foreach (var objbox in objects)
-                    {
-                        target.Mutate(ctx =>
-                        {
-                            ctx.DrawPolygon(
-                                Pens.Solid(Color.Blue, 2),
-                                new PointF[] {
-                                new PointF((float)objbox.XMin, (float)objbox.YMin),
-                                new PointF((float)objbox.XMin, (float)objbox.YMax),
-                                new PointF((float)objbox.XMax, (float)objbox.YMax),
-                                new PointF((float)objbox.XMax, (float)objbox.YMin)
-                                });
-
-                            ctx.DrawText(
-                                $"{labels[objbox.Class]}",
-                                SystemFonts.Families.First().CreateFont(16),
-                                Color.Blue,
-                                new PointF((float)objbox.XMin, (float)objbox.YMax));
-                        });
-                    }
-                }
-
                 // Убираем дубликаты
                 for (int i = 0; i < objects.Count; i++)
                 {
                     var o1 = objects[i];
                     for (int j = i + 1; j < objects.Count;)
                     {
+                        token.ThrowIfCancellationRequested();
                         var o2 = objects[j];
                         Console.WriteLine($"IoU({i},{j})={o1.IoU(o2)}");
                         if (o1.Class == o2.Class && o1.IoU(o2) > 0.6)
@@ -280,10 +251,10 @@ namespace ClassLibrary
         {
             List<ObjectBox> objects = await Task<List<ObjectBox>>.Factory.StartNew(() =>
             {
-                var tuple = ImagePreprocessing(image);
+                var tuple = ImagePreprocessing(image, token);
                 var resized = tuple.Item1;
                 var inputs = tuple.Item2;
-                return GetObjects(resized, inputs);
+                return GetObjects(resized, inputs, token);
             }, token, TaskCreationOptions.LongRunning, TaskScheduler.Current);
             return new Tuple<Image<Rgb24>, List<ObjectBox>>(image, objects);
         }
@@ -325,7 +296,7 @@ namespace ClassLibrary
             }
         }
 
-        async Task<Tuple<Image<Rgb24>, ObjectBox>> DoWork(Image<Rgb24> resized, ObjectBox obj, CancellationToken token)
+        private async Task<Tuple<Image<Rgb24>, ObjectBox>> DoWork(Image<Rgb24> resized, ObjectBox obj, CancellationToken token)
         {
             return await Task<Tuple<Image<Rgb24>, ObjectBox>>.Factory.StartNew(() =>
             {
@@ -337,7 +308,37 @@ namespace ClassLibrary
 
         }
 
+        //string[] labels = new string[]
+        //    {
+        //        "aeroplane", "bicycle", "bird", "boat", "bottle",
+        //        "bus", "car", "cat", "chair", "cow",
+        //        "diningtable", "dog", "horse", "motorbike", "person",
+        //        "pottedplant", "sheep", "sofa", "train", "tvmonitor"
+        //    };
 
+        //public void Annotate(Image<Rgb24> target, IEnumerable<ObjectBox> objects)
+        //{
+        //    foreach (var objbox in objects)
+        //    {
+        //        target.Mutate(ctx =>
+        //        {
+        //            ctx.DrawPolygon(
+        //                Pens.Solid(Color.Blue, 2),
+        //                new PointF[] {
+        //                        new PointF((float)objbox.XMin, (float)objbox.YMin),
+        //                        new PointF((float)objbox.XMin, (float)objbox.YMax),
+        //                        new PointF((float)objbox.XMax, (float)objbox.YMax),
+        //                        new PointF((float)objbox.XMax, (float)objbox.YMin)
+        //                });
+
+        //            ctx.DrawText(
+        //                $"{labels[objbox.Class]}",
+        //                SystemFonts.Families.First().CreateFont(16),
+        //                Color.Blue,
+        //                new PointF((float)objbox.XMin, (float)objbox.YMax));
+        //        });
+        //    }
+        //}
 
     }
 }
