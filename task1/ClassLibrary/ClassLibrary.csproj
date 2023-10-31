@@ -2,7 +2,7 @@
 
   <PropertyGroup>
 	 <PackageId>Zagainov.ImageAnalyzer</PackageId>
-	 <Version>0.2.1023.10</Version>
+	 <Version>0.3.1023.28</Version>
     <TargetFramework>net6.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>

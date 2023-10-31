@@ -78,7 +78,7 @@ namespace ClassLibrary
             return exps.Select(e => (float)(e / sum)).ToArray();
         }
 
-        public Tuple<Image<Rgb24>, List<NamedOnnxValue>> ImagePreprocessing(Image<Rgb24> image, CancellationToken token)
+        public (Image<Rgb24>, List<NamedOnnxValue>) ImagePreprocessing(Image<Rgb24> image, CancellationToken token)
         {
             token.ThrowIfCancellationRequested();
             int imageWidth = image.Width;
@@ -247,7 +247,7 @@ namespace ClassLibrary
                 (Math.Min(XMax, b2.XMax) - Math.Max(XMin, b2.XMin)) * (Math.Min(YMax, b2.YMax) - Math.Max(YMin, b2.YMin)) /
                 ((Math.Max(XMax, b2.XMax) - Math.Min(XMin, b2.XMin)) * (Math.Max(YMax, b2.YMax) - Math.Min(YMin, b2.YMin)));
         }
-        public async Task<Tuple<Image<Rgb24>, List<ObjectBox>>> Detect(Image<Rgb24> image, CancellationToken token)
+        public async Task<(Image<Rgb24>, List<ObjectBox>)> Detect(Image<Rgb24> image, CancellationToken token)
         {
             List<ObjectBox> objects = await Task<List<ObjectBox>>.Factory.StartNew(() =>
             {
@@ -256,11 +256,11 @@ namespace ClassLibrary
                 var inputs = tuple.Item2;
                 return GetObjects(resized, inputs, token);
             }, token, TaskCreationOptions.LongRunning, TaskScheduler.Current);
-            return new Tuple<Image<Rgb24>, List<ObjectBox>>(image, objects);
+            return (image, objects);
         }
 
 
-        public async Task<List<Tuple<Image<Rgb24>, ObjectBox>>> CutImage(Tuple<Image<Rgb24>, List<ObjectBox>> input, CancellationToken token)
+        public async Task<List<(Image<Rgb24>, ObjectBox)>> CutImage((Image<Rgb24>, List<ObjectBox>) input, CancellationToken token)
         {
             Image<Rgb24> image = input.Item1;
             List<ObjectBox> objects = input.Item2;
@@ -275,7 +275,7 @@ namespace ClassLibrary
                 });
             });
 
-            List<Tuple<Image<Rgb24>, ObjectBox>> cut_images = new();
+            List<(Image<Rgb24>, ObjectBox)> cut_images = new();
             await foreach (var obj in get_cut_images(resized, objects, token))
                 cut_images.Add(obj);
 
@@ -284,7 +284,7 @@ namespace ClassLibrary
 
         }
 
-        private async IAsyncEnumerable<Tuple<Image<Rgb24>, ObjectBox>> get_cut_images(Image<Rgb24> resized, List<ObjectBox> objects, CancellationToken token)
+        private async IAsyncEnumerable<(Image<Rgb24>, ObjectBox)> get_cut_images(Image<Rgb24> resized, List<ObjectBox> objects, CancellationToken token)
         {
             var jobs = Enumerable.Range(0, objects.Count).Select(i => DoWork(resized, objects[i], token)).ToList();
 
@@ -296,9 +296,9 @@ namespace ClassLibrary
             }
         }
 
-        private async Task<Tuple<Image<Rgb24>, ObjectBox>> DoWork(Image<Rgb24> resized, ObjectBox obj, CancellationToken token)
+        private async Task<(Image<Rgb24>, ObjectBox)> DoWork(Image<Rgb24> resized, ObjectBox obj, CancellationToken token)
         {
-            return await Task<Tuple<Image<Rgb24>, ObjectBox>>.Factory.StartNew(() =>
+            return await Task<(Image<Rgb24>, ObjectBox)>.Factory.StartNew(() =>
             {
                 return new(resized.Clone(x =>
                 {
